@@ -6,10 +6,13 @@ import time
 from dotenv import load_dotenv
 from telebot import TeleBot
 
-from constants import ENDPOINT, ENV_VARIABLES, HOMEWORK_VERDICTS, RETRY_PERIOD
+from constants import (
+    ANSWER_KEYS, DIFFERENCE, ENDPOINT, ENV_VARIABLES,
+    HOMEWORK_VERDICTS, RETRY_PERIOD
+)
 from exceptions import (
-    AbsenceVariableException, homework_statuses, key_verification,
-    MissingKeyException, UnexpectedHomeworkStatusException
+    AbsenceVariableException, MissingKeyException,
+    UnexpectedHomeworkStatusException
 )
 
 load_dotenv()
@@ -18,12 +21,11 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
+homework_status = None
+
 
 def check_tokens():
-    """
-    Проверяет доступность переменных окружения, которые необходимы для работы
-    программы.
-    """
+    """Проверяет доступность переменных окружения."""
     for env_variable in ENV_VARIABLES:
         if os.getenv(env_variable) is None:
             raise AbsenceVariableException(
@@ -46,7 +48,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(timestamp):
-    """Делает запрос к API-сервиса Практикум.Домашка. """
+    """Делает запрос к API-сервиса Практикум.Домашка."""
     try:
         response = requests.get(
             ENDPOINT,
@@ -71,18 +73,31 @@ def get_api_answer(timestamp):
 def check_response(response):
     """Проверяет ответ API."""
     try:
-        key_verification(response)
-        homework_statuses(response)
-    except MissingKeyException:
-        logging.error('Отсутствуют ожидаемые ключи в ответе API.')
-    except UnexpectedHomeworkStatusException:
-        logging.error('Неожиданный статус домашней работы.')
+        for key in ANSWER_KEYS:
+            if response.get(key) is None:
+                raise MissingKeyException()
+    except MissingKeyException as error:
+        logging.error(f'Отсутствуют ожидаемые ключи в ответе API: {error}.')
 
 
 def parse_status(homework):
-    pass
+    """Извлекает из информации о конкретной домашней работе статус."""
+    global homework_status
+    try:
+        current_status = homework.get('status')
+        if current_status not in HOMEWORK_VERDICTS.keys():
+            raise UnexpectedHomeworkStatusException()
 
-    # return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+        if current_status != homework_status:
+            homework_status = current_status
+            homework_name = homework.get("homework_name")
+            return (
+                f'Изменился статус проверки работы "{homework_name}".'
+                f'{HOMEWORK_VERDICTS[current_status]}'
+            )
+        logging.debug('Отсутствие в ответе новых статусов.')
+    except UnexpectedHomeworkStatusException:
+        logging.error('Неожиданный статус домашней работы.')
 
 
 def main():
@@ -94,15 +109,18 @@ def main():
     check_tokens()
 
     bot = TeleBot(token=TELEGRAM_TOKEN)
-    timestamp = int(time.time())
+    timestamp = int(time.time()) - DIFFERENCE
+    sent_messages = []
 
     while True:
         try:
             response = get_api_answer(timestamp)
             check_response(response)
-
+            message = parse_status(response[ANSWER_KEYS[0]][0])
+            if message:
+                send_message(bot, message)
+            time.sleep(RETRY_PERIOD)
         except Exception as error:
-            sent_messages = []
             message = f'Сбой в работе программы: {error}'
             if message not in sent_messages:
                 sent_messages.append(message)

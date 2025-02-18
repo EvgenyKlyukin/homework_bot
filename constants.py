@@ -1,8 +1,14 @@
-# Период опрашивания API сервиса Практикум Домашка.
-RETRY_PERIOD = 600
+# Ожидаемые ключи в ответе API Практикум Домашка.
+ANSWER_KEYS = ('homeworks', 'current_date')
+
+# Определяет за какой период был присвоен статус домашней работы.
+DIFFERENCE = 2592000  # По умолчанию принят месяц.
 
 # Эндпоинт API Практикум Домашка.
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
+
+# Переменные окружения необходимые для работы программы.
+ENV_VARIABLES = ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID')
 
 # Статусы домашней работы.
 HOMEWORK_VERDICTS = {
@@ -11,8 +17,5 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-# Ожидаемые ключи в ответе API Практикум Домашка.
-ANSWER_KEYS = ('homeworks', 'current_date')
-
-# Переменные окружения необходимые для работы программы.
-ENV_VARIABLES = ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID')
+# Период опрашивания API сервиса Практикум Домашка.
+RETRY_PERIOD = 600
