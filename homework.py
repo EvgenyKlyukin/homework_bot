@@ -148,12 +148,13 @@ def main():
             message = parse_status(response[ANSWER_KEYS[0]][0])
             if message:
                 send_message(bot, message)
-            time.sleep(RETRY_PERIOD)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             if message not in sent_messages:
                 sent_messages.append(message)
                 send_message(bot, message)
+        finally:
+            time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
