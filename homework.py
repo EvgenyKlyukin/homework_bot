@@ -84,17 +84,25 @@ def get_api_answer(timestamp):
 def check_response(response):
     """Проверяет ответ API."""
     try:
+        if not isinstance(response, dict):
+            raise TypeError()
         for key in ANSWER_KEYS:
             if response.get(key) is None:
                 raise MissingKeyException()
     except MissingKeyException as error:
         logging.error(f'Отсутствуют ожидаемые ключи в ответе API: {error}.')
+        raise
+    except TypeError as error:
+        logging.error(f'Структура данных не соответствует ожиданиям: {error}.')
+        raise
 
 
 def parse_status(homework):
     """Извлекает из информации о конкретной домашней работе статус."""
     global homework_status
     try:
+        if ANSWER_KEYS[0] not in homework:
+            raise KeyError(ANSWER_KEYS[0])
         current_status = homework.get('status')
         if current_status is None:
             raise KeyError('status')
