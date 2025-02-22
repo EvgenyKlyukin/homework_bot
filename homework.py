@@ -2,6 +2,7 @@ import logging
 import os
 import requests
 import time
+from http import HTTPStatus
 
 from dotenv import load_dotenv
 from telebot import TeleBot
@@ -12,7 +13,7 @@ from constants import (
 )
 from exceptions import (
     AbsenceVariableException, MissingKeyException,
-    UnexpectedHomeworkStatusException
+    RequestNoContentException, UnexpectedHomeworkStatusException
 )
 
 load_dotenv()
@@ -58,18 +59,24 @@ def get_api_answer(timestamp):
             params={'from_date': timestamp}
         )
         response.raise_for_status()
+
+        if response.status_code == HTTPStatus.NO_CONTENT:
+            raise RequestNoContentException()
         response = response.json()
         return response
     except requests.exceptions.ConnectionError:
         logging.error('Ошибка подключения к серверу.')
     except requests.exceptions.Timeout:
         logging.error('Превышено время ожидания.')
-    except requests.exceptions.RequestException as error:
-        logging.error(f"Ошибка при выполнении запроса: {error}.")
     except requests.exceptions.HTTPError as error:
-        logging.error(f"HTTP-ошибка: {error}.")
+        logging.error(f'HTTP-ошибка: {error}.')
+        raise
+    except RequestNoContentException:
+        logging.error('Запрос выполнен, но нет содержимого для возврата.')
+        raise
     except Exception as error:
-        logging.error(error)
+        logging.error(f'Неизвестная ошибка: {error}.')
+        raise
 
 
 def check_response(response):
@@ -92,7 +99,7 @@ def parse_status(homework):
 
         if current_status != homework_status:
             homework_status = current_status
-            homework_name = homework.get("homework_name")
+            homework_name = homework.get('homework_name')
             return (
                 f'Изменился статус проверки работы "{homework_name}".'
                 f'{HOMEWORK_VERDICTS[current_status]}'
