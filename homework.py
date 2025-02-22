@@ -21,6 +21,8 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
+HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
+
 homework_status = None
 
 
@@ -52,7 +54,7 @@ def get_api_answer(timestamp):
     try:
         response = requests.get(
             ENDPOINT,
-            headers={'Authorization': f'OAuth {PRACTICUM_TOKEN}'},
+            headers=HEADERS,
             params={'from_date': timestamp}
         )
         response.raise_for_status()
