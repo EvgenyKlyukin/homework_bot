@@ -74,6 +74,8 @@ def get_api_answer(timestamp):
     except RequestNoContentException:
         logging.error('Запрос выполнен, но нет содержимого для возврата.')
         raise
+    except requests.RequestException as error:
+        logging.error(f'Ошибка при выполнении запроса: {error}.')
     except Exception as error:
         logging.error(f'Неизвестная ошибка: {error}.')
         raise
