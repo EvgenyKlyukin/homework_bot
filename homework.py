@@ -96,6 +96,9 @@ def parse_status(homework):
     global homework_status
     try:
         current_status = homework.get('status')
+        if current_status is None:
+            raise KeyError('status')
+
         if current_status not in HOMEWORK_VERDICTS.keys():
             raise UnexpectedHomeworkStatusException()
 
@@ -109,6 +112,10 @@ def parse_status(homework):
         logging.debug('Отсутствие в ответе новых статусов.')
     except UnexpectedHomeworkStatusException:
         logging.error('Неожиданный статус домашней работы.')
+        raise
+    except KeyError as e:
+        logging.error(f'Отсутствует ключ: {e}')
+        raise
 
 
 def main():
