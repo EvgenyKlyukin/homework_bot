@@ -1,20 +1,17 @@
 import logging
 import os
-import requests
 import time
 from http import HTTPStatus
 
+import requests
 from dotenv import load_dotenv
 from telebot import TeleBot
 
-from constants import (
-    ANSWER_KEYS, DIFFERENCE, ENDPOINT, ENV_VARIABLES,
-    HOMEWORK_VERDICTS, RETRY_PERIOD
-)
-from exceptions import (
-    AbsenceVariableException, MissingKeyException,
-    RequestNoContentException, UnexpectedHomeworkStatusException
-)
+from constants import (ANSWER_KEYS, DIFFERENCE, ENDPOINT, ENV_VARIABLES,
+                       HOMEWORK_VERDICTS, RETRY_PERIOD)
+from exceptions import (AbsenceVariableException, MissingKeyException,
+                        RequestNoContentException,
+                        UnexpectedHomeworkStatusException)
 
 load_dotenv()
 
@@ -105,23 +102,25 @@ def parse_status(homework):
     """Извлекает из информации о конкретной домашней работе статус."""
     global homework_status
     try:
-        if ANSWER_KEYS[0] not in homework:
-            raise KeyError(ANSWER_KEYS[0])
+        if 'homework_name' not in homework:
+            raise KeyError('Ключ "homework_name" отсутствует в ответе API.')
+
         current_status = homework.get('status')
         if current_status is None:
-            raise KeyError('status')
+            raise KeyError('Ключ "status" отсутствует в ответе API.')
 
-        if current_status not in HOMEWORK_VERDICTS.keys():
+        if current_status not in HOMEWORK_VERDICTS:
             raise UnexpectedHomeworkStatusException()
 
         if current_status != homework_status:
             homework_status = current_status
-            homework_name = homework.get('homework_name')
+            homework_name = homework['homework_name']
             return (
-                f'Изменился статус проверки работы "{homework_name}".'
+                f'Изменился статус проверки работы "{homework_name}". '
                 f'{HOMEWORK_VERDICTS[current_status]}'
             )
         logging.debug('Отсутствие в ответе новых статусов.')
+
     except UnexpectedHomeworkStatusException:
         logging.error('Неожиданный статус домашней работы.')
         raise
