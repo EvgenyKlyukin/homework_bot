@@ -85,10 +85,14 @@ def check_response(response):
     """Проверяет ответ API."""
     try:
         if not isinstance(response, dict):
-            raise TypeError()
+            raise TypeError('Ответ должен быть словарем.')
         for key in ANSWER_KEYS:
             if response.get(key) is None:
                 raise MissingKeyException()
+        if not isinstance(response['homeworks'], list):
+            raise TypeError(
+                'Данные под ключом "homeworks" должны быть списком.'
+            )
     except MissingKeyException as error:
         logging.error(f'Отсутствуют ожидаемые ключи в ответе API: {error}.')
         raise
