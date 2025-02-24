@@ -1,50 +1,66 @@
 import logging
 import os
+import sys
 import time
 from http import HTTPStatus
 
 import requests
 from dotenv import load_dotenv
 from telebot import TeleBot
+from telebot.apihelper import ApiException
 
-from constants import (ANSWER_KEYS, DIFFERENCE, ENDPOINT, ENV_VARIABLES,
-                       HOMEWORK_VERDICTS, RETRY_PERIOD)
 from exceptions import (AbsenceVariableException, MissingKeyException,
                         RequestNoContentException,
                         UnexpectedHomeworkStatusException)
 
+# Загружаем переменные окружения из .env файла.
 load_dotenv()
 
+# Константы.
+ANSWER_KEYS = ('homeworks', 'current_date')
+DIFFERENCE = 2592000  # 30 дней.
+ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
+ENV_VARIABLES = ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID')
+HOMEWORK_VERDICTS = {  # Статусы домашней работы.
+    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
+    'reviewing': 'Работа взята на проверку ревьюером.',
+    'rejected': 'Работа проверена: у ревьюера есть замечания.'
+}
+RETRY_PERIOD = 600  # Период опроса API в секундах.
+
+# Получение токенов из переменных окружения
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
+# Заголовки для запросов к API.
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
-homework_status = None
+# Настройка логирования.
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    for env_variable in ENV_VARIABLES:
-        if os.getenv(env_variable) is None:
-            raise AbsenceVariableException(
-                f'Отстутствует переменная окружения {env_variable}'
-            )
+    missing_vars = [var for var in ENV_VARIABLES if globals()[var] is None]
+    if missing_vars:
+        logger.critical(f'Отсутствуют переменные окружения: {missing_vars}')
+        raise AbsenceVariableException()
 
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram-чат."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-    except Exception as error:
-        logging.error(
-            f'Сбой при отправке сообщения: {error}.'
-            f'TELEGRAM_CHAT_ID: {TELEGRAM_CHAT_ID}'
-            f'message: {message}'
-        )
-    else:
-        logging.debug(f'Сообщение отправлено: {TELEGRAM_CHAT_ID, message}')
+        logger.debug(f'Сообщение отправлено: {message}.')
+    except ApiException as error:
+        logger.error(f'Сообщение не отправлено, из-за ошибки {error}.')
 
 
 def get_api_answer(timestamp):
@@ -100,61 +116,56 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекает из информации о конкретной домашней работе статус."""
-    global homework_status
-    try:
-        if 'homework_name' not in homework:
-            raise KeyError('Ключ "homework_name" отсутствует в ответе API.')
+    if 'homework_name' not in homework:
+        raise KeyError('Ключ "homework_name" отсутствует в ответе API.')
 
-        current_status = homework.get('status')
-        if current_status is None:
-            raise KeyError('Ключ "status" отсутствует в ответе API.')
+    status = homework.get('status')
 
-        if current_status not in HOMEWORK_VERDICTS:
-            raise UnexpectedHomeworkStatusException()
+    if status is None:
+        raise KeyError('Ключ "status" отсутствует в ответе API.')
 
-        if current_status != homework_status:
-            homework_status = current_status
-            homework_name = homework['homework_name']
-            return (
-                f'Изменился статус проверки работы "{homework_name}". '
-                f'{HOMEWORK_VERDICTS[current_status]}'
-            )
-        logging.debug('Отсутствие в ответе новых статусов.')
+    if 'homework_name' not in homework or 'status' not in homework:
+        raise KeyError('Отсутствуют ключи "homework_name" или "status".')
 
-    except UnexpectedHomeworkStatusException:
-        logging.error('Неожиданный статус домашней работы.')
-        raise
-    except KeyError as e:
-        logging.error(f'Отсутствует ключ: {e}')
-        raise
+    if status not in HOMEWORK_VERDICTS:
+        raise UnexpectedHomeworkStatusException(
+            'Неизвестный статус домашней работы.'
+        )
+
+    homework_name = homework['homework_name']
+    return (
+        f'Изменился статус проверки работы "{homework_name}". '
+        f'{HOMEWORK_VERDICTS[status]}'
+    )
 
 
 def main():
     """Основная логика работы бота."""
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO,
-    )
     check_tokens()
-
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time()) - DIFFERENCE
-    sent_messages = []
+    last_message = None
 
     while True:
         try:
             response = get_api_answer(timestamp)
             check_response(response)
-            message = parse_status(response[ANSWER_KEYS[0]][0])
-            if message:
-                send_message(bot, message)
+            homeworks = response['homeworks']
+            timestamp = response['current_date']
+
+            if homeworks:
+                message = parse_status(homeworks[0])
+                if message != last_message:
+                    send_message(bot, message)
+                    last_message = message
+            else:
+                logger.debug('Нет новых статусов домашних работ.')
+
         except Exception as error:
-            message = f'Сбой в работе программы: {error}'
-            if message not in sent_messages:
-                sent_messages.append(message)
-                send_message(bot, message)
-        finally:
-            time.sleep(RETRY_PERIOD)
+            logger.error(f'Ошибка в работе программы: {error}')
+            send_message(bot, f'Сбой в работе программы: {error}')
+
+        time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
