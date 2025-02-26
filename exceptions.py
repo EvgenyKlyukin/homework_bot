@@ -2,10 +2,6 @@ class AbsenceVariableException(Exception):
     """Отсутствуют необходимые переменные окружения."""
 
 
-class MissingKeyException(Exception):
-    """В ответе API отсутствуют ожидаемые ключи."""
-
-
 class RequestException(Exception):
     """Ошибка при выполнении запроса."""
 

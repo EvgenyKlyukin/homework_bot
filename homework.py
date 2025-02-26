@@ -10,7 +10,6 @@ from telebot import TeleBot
 from telebot.apihelper import ApiException
 
 from exceptions import (AbsenceVariableException,
-                        MissingKeyException,
                         RequestException,
                         RequestNoContentException,
                         UnexpectedHomeworkStatusException)
@@ -50,7 +49,15 @@ logger.addHandler(handler)
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    missing_vars = [var for var in ENV_VARIABLES if not globals()[var]]
+    env_var = {
+        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
+        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
+        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
+    }
+    missing_vars = []
+    for env_name, env_token in env_var.items():
+        if env_token is None:
+            missing_vars.append(env_name)
     if missing_vars:
         logger.critical(f'Отсутствуют переменные окружения: {missing_vars}')
         raise AbsenceVariableException()
@@ -61,6 +68,7 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.debug(f'Сообщение отправлено: {message}.')
+        return True
     except ApiException as error:
         logger.error(f'Сообщение не отправлено, из-за ошибки {error}.')
     except requests.RequestException:
@@ -78,38 +86,31 @@ def get_api_answer(timestamp):
             params={'from_date': timestamp}
         )
         response.raise_for_status()
-
-        if response.status_code == HTTPStatus.NO_CONTENT:
-            raise RequestNoContentException(
-                'Запрос выполнен, но нет содержимого для возврата.'
-            )
-        response = response.json()
-        return response
     except requests.exceptions.RequestException as error:
         raise RequestException(
             f'Ошибка при выполнении запроса: {error}.'
             f'ENDPOINT: {ENDPOINT} headers: {HEADERS} params: {timestamp}'
         )
+    if response.status_code == HTTPStatus.NO_CONTENT:
+        raise RequestNoContentException(
+            'Запрос выполнен, но нет содержимого для возврата.'
+        )
+    response = response.json()
+    return response
 
 
 def check_response(response):
     """Проверяет ответ API."""
-    try:
-        if not isinstance(response, dict):
-            raise TypeError('Ответ должен быть словарем.')
-        for key in ANSWER_KEYS:
-            if response.get(key) is None:
-                raise MissingKeyException()
-        if not isinstance(response['homeworks'], list):
-            raise TypeError(
-                'Данные под ключом "homeworks" должны быть списком.'
-            )
-    except MissingKeyException as error:
-        logging.error(f'Отсутствуют ожидаемые ключи в ответе API: {error}.')
-        raise
-    except TypeError as error:
-        logging.error(f'Структура данных не соответствует ожиданиям: {error}.')
-        raise
+    if not isinstance(response, dict):
+        raise TypeError(f'Ответ должен быть словарем: {type(response)}')
+    for key in ANSWER_KEYS:
+        if response.get(key) is None:
+            raise KeyError(f'Указанный ключ отсутствует: {key}')
+    if not isinstance(response['homeworks'], list):
+        raise TypeError(
+            'Данные под ключом "homeworks" должны быть '
+            f'списком: {response["homeworks"]}'
+        )
 
 
 def parse_status(homework):
@@ -121,9 +122,6 @@ def parse_status(homework):
 
     if status is None:
         raise KeyError('Ключ "status" отсутствует в ответе API.')
-
-    if 'homework_name' not in homework or 'status' not in homework:
-        raise KeyError('Отсутствуют ключи "homework_name" или "status".')
 
     if status not in HOMEWORK_VERDICTS:
         raise UnexpectedHomeworkStatusException(
@@ -149,19 +147,20 @@ def main():
             response = get_api_answer(timestamp)
             check_response(response)
             homeworks = response['homeworks']
-            timestamp = response['current_date']
+            timestamp = int(time.time())
 
             if homeworks:
                 message = parse_status(homeworks[0])
                 if message != last_message:
-                    send_message(bot, message)
-                    last_message = message
+                    if send_message(bot, message):
+                        last_message = message
             else:
                 logger.debug('Нет новых статусов домашних работ.')
 
         except Exception as error:
-            logger.error(f'Ошибка в работе программы: {error}')
-            send_message(bot, f'Сбой в работе программы: {error}')
+            error_message = f'Ошибка в работе программы: {error}'
+            logger.error(error_message)
+            send_message(bot, error_message)
 
         time.sleep(RETRY_PERIOD)
 
