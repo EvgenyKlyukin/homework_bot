@@ -6,6 +6,10 @@ class MissingKeyException(Exception):
     """В ответе API отсутствуют ожидаемые ключи."""
 
 
+class RequestException(Exception):
+    """Ошибка при выполнении запроса."""
+
+
 class RequestNoContentException(Exception):
     """Запрос к API возвращает пустой ответ."""
 

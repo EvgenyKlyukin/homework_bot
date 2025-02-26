@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 from telebot import TeleBot
 from telebot.apihelper import ApiException
 
-from exceptions import (AbsenceVariableException, MissingKeyException,
+from exceptions import (AbsenceVariableException,
+                        MissingKeyException,
+                        RequestException,
                         RequestNoContentException,
                         UnexpectedHomeworkStatusException)
 
@@ -48,7 +50,7 @@ logger.addHandler(handler)
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    missing_vars = [var for var in ENV_VARIABLES if globals()[var] is None]
+    missing_vars = [var for var in ENV_VARIABLES if not globals()[var]]
     if missing_vars:
         logger.critical(f'Отсутствуют переменные окружения: {missing_vars}')
         raise AbsenceVariableException()
@@ -61,6 +63,10 @@ def send_message(bot, message):
         logger.debug(f'Сообщение отправлено: {message}.')
     except ApiException as error:
         logger.error(f'Сообщение не отправлено, из-за ошибки {error}.')
+    except requests.RequestException:
+        logger.error(
+            'При обработке запроса произошло неоднозначное исключение.'
+        )
 
 
 def get_api_answer(timestamp):
@@ -74,24 +80,16 @@ def get_api_answer(timestamp):
         response.raise_for_status()
 
         if response.status_code == HTTPStatus.NO_CONTENT:
-            raise RequestNoContentException()
+            raise RequestNoContentException(
+                'Запрос выполнен, но нет содержимого для возврата.'
+            )
         response = response.json()
         return response
-    except requests.exceptions.ConnectionError:
-        logging.error('Ошибка подключения к серверу.')
-    except requests.exceptions.Timeout:
-        logging.error('Превышено время ожидания.')
-    except requests.exceptions.HTTPError as error:
-        logging.error(f'HTTP-ошибка: {error}.')
-        raise
-    except RequestNoContentException:
-        logging.error('Запрос выполнен, но нет содержимого для возврата.')
-        raise
-    except requests.RequestException as error:
-        logging.error(f'Ошибка при выполнении запроса: {error}.')
-    except Exception as error:
-        logging.error(f'Неизвестная ошибка: {error}.')
-        raise
+    except requests.exceptions.RequestException as error:
+        raise RequestException(
+            f'Ошибка при выполнении запроса: {error}.'
+            f'ENDPOINT: {ENDPOINT} headers: {HEADERS} params: {timestamp}'
+        )
 
 
 def check_response(response):
