@@ -151,16 +151,14 @@ def main():
 
             if homeworks:
                 message = parse_status(homeworks[0])
-                if message != last_message:
-                    if send_message(bot, message):
-                        last_message = message
+                if message != last_message and send_message(bot, message):
+                    last_message = message
             else:
                 logger.debug('Нет новых статусов домашних работ.')
 
         except Exception as error:
             error_message = f'Ошибка в работе программы: {error}'
             logger.error(error_message)
-            send_message(bot, error_message)
 
         time.sleep(RETRY_PERIOD)
 
