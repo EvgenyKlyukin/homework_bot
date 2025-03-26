@@ -58,6 +58,5 @@ The project uses tests written with the pytest framework. To run the tests, exec
 ```
 The test configuration is located in the 'pytest.ini` file. The tests check the correct functioning of the main components of the game
 
----
 ## Authors
 - [Evgeny Klyukin](https://github.com/EvgenyKlyukin) — lead developer.
